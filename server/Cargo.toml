@@ -1,0 +1,42 @@
+[package]
+name = "snapcord"
+version = "0.1.0"
+description = "SnapCord - Screenshot staging and desktop pinning tool"
+authors = ["you"]
+edition = "2021"
+
+[lib]
+name = "snapcord_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+image = "0.25"
+notify = "6"
+parking_lot = "0.12"
+clipboard-win = "5"
+
+[dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Registry",
+    "Win32_System_Com",
+]
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,27 @@
+SnapCord · 图索
+
+本项目是基于 PicRope 的独立重写版本：
+https://github.com/Renly1994/PicRope
+
+PicRope 是 Tendedero 的 Windows 移植版本：
+https://github.com/alejandrobujan/tendedero
+
+上游参考版本：PicRope (commit to be specified)
+原始上游版本：Tendedero commit db65d2ea84ba5120b4ed90acce2b457d4ad18c4b
+
+原版权声明：
+- Copyright (c) 2026 Alejandro Buján (Tendedero)
+- Copyright (c) 2026 Renly (PicRope)
+- Copyright (c) 2026 SnapCord contributors
+
+完整 MIT 许可及上游名称、图标条款见 LICENSE 文件。
+
+本项目的技术栈：
+- 后端：Rust + Tauri 2.0
+- 前端：Vue 3 + TypeScript + Vite
+- 构建：Cargo + npm
+
+本项目是独立开发的重写版本，不代表上游项目，未获得上游作者背书。
+英文名称为 SnapCord，中文名称为「图索」，使用独立设计的图标。
+
+第三方依赖随安装包提供。

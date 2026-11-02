@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+ui/node_modules/
+server/target/
+
+# Build outputs
+ui/dist/
+server/target/debug/
+server/target/release/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Rust
+server/target/
+**/*.rs.bk
+
+# Temporary files
+*.tmp
+*.temp
+vibe_images/
+
+# Qoder
+.qoder/

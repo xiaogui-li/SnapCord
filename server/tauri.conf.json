@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/tauri/schema.json",
+  "productName": "SnapCord",
+  "version": "0.1.0",
+  "identifier": "com.snapcord.app",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../ui run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm --prefix ../ui run build",
+    "frontendDist": "../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "SnapCord · 图索",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
