@@ -1,11 +1,23 @@
 <template>
   <div class="app-container">
+    <!-- Trigger button -->
+    <RopeTrigger v-if="!settings.rope_always_visible" @toggle="toggleRope" />
+
     <!-- Main rope bar -->
     <Rope
-      :images="images"
+      :images="ropeImages"
+      :card-scale="effectiveCardScale"
+      :rope-sag="effectiveRopeSag"
+      :card-swing="effectiveCardSwing"
+      :is-visible="isRopeVisible"
+      :animation-style="settings.rope_animation_style"
+      :animation-duration="settings.rope_animation_duration"
       @image-click="handleImageClick"
       @drag-start="handleDragStart"
       @pin="handlePin"
+      @copy="handleImageClick"
+      @basket="handleMoveToBasket"
+      @edit="handleEdit"
     />
 
     <!-- Basket panel -->
@@ -18,30 +30,11 @@
 
     <!-- Text envelope -->
     <TextEnvelope
-      :items="textItems"
+      :items="texts"
       :is-visible="showTextEnvelope"
       @close="showTextEnvelope = false"
+      @clear="handleClearTexts"
     />
-
-    <!-- Floating action buttons -->
-    <div class="fab-container">
-      <button class="fab" @click="toggleBasket" :class="{ active: showBasket }">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <path d="M16 10a4 4 0 0 1-8 0"></path>
-        </svg>
-        <span v-if="basketImages.length > 0" class="fab-badge">{{ basketImages.length }}</span>
-      </button>
-
-      <button class="fab" @click="toggleTextEnvelope" :class="{ active: showTextEnvelope }">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-          <polyline points="22,6 12,13 2,6"></polyline>
-        </svg>
-        <span v-if="textItems.length > 0" class="fab-badge">{{ textItems.length }}</span>
-      </button>
-    </div>
 
     <!-- Status toast -->
     <Transition name="toast">
@@ -53,81 +46,126 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue';
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import Rope from './components/Rope.vue';
+import RopeTrigger from './components/RopeTrigger.vue';
 import BasketPanel from './components/BasketPanel.vue';
 import TextEnvelope from './components/TextEnvelope.vue';
+import { api, events, isTauri } from './api';
+import type { ImageItem, Settings, TextItem } from './types';
 
-interface Image {
-  id: string;
-  path: string;
-  thumbnail: string;
-  timestamp: Date;
-}
+const images = ref<ImageItem[]>([]);
+const texts = ref<TextItem[]>([]);
 
-interface TextItem {
-  id: string;
-  content: string;
-  timestamp: Date;
-}
-
-// Mock data for development
-const images = ref<Image[]>([
-  {
-    id: '1',
-    path: '/mock/screenshot1.png',
-    thumbnail: 'https://picsum.photos/seed/snap1/200/150',
-    timestamp: new Date(),
-  },
-  {
-    id: '2',
-    path: '/mock/screenshot2.png',
-    thumbnail: 'https://picsum.photos/seed/snap2/200/150',
-    timestamp: new Date(),
-  },
-  {
-    id: '3',
-    path: '/mock/screenshot3.png',
-    thumbnail: 'https://picsum.photos/seed/snap3/200/150',
-    timestamp: new Date(),
-  },
-]);
-
-const basketImages = ref<Image[]>([
-  {
-    id: '4',
-    path: '/mock/basket1.png',
-    thumbnail: 'https://picsum.photos/seed/basket1/200/150',
-    timestamp: new Date(),
-  },
-  {
-    id: '5',
-    path: '/mock/basket2.png',
-    thumbnail: 'https://picsum.photos/seed/basket2/200/150',
-    timestamp: new Date(),
-  },
-]);
-
-const textItems = ref<TextItem[]>([
-  {
-    id: '1',
-    content: '这是一段示例文字，来自剪贴板收集。',
-    timestamp: new Date(),
-  },
-  {
-    id: '2',
-    content: 'SnapCord 是一个截图暂存工具，支持拖拽、复制和桌面贴图。',
-    timestamp: new Date(Date.now() - 3600000),
-  },
-]);
+const ropeImages = computed(() => images.value.filter((img) => img.source !== 'basket'));
+const basketImages = computed(() => images.value.filter((img) => img.source === 'basket'));
 
 const showBasket = ref(false);
 const showTextEnvelope = ref(false);
 
+const overlayExpanded = ref(false);
+
+const defaultSettings: Settings = {
+  screenshots_folder: '',
+  auto_hang: true,
+  collect_images: true,
+  collect_texts: false,
+  capture_hotkey_modifiers: 0x0001 | 0x0002,
+  capture_hotkey_key: 0x53,
+  toggle_hotkey_modifiers: 0x0001 | 0x0002,
+  toggle_hotkey_key: 0x54,
+  display_screen: 0,
+  theme: 'classic',
+  start_on_boot: false,
+  auto_update: true,
+  card_scale: 1,
+  rope_sag: 35,
+  card_swing: 4,
+  rope_always_visible: false,
+  rope_auto_hide_seconds: 5,
+  rope_animation_style: 0,
+  rope_animation_duration: 1500,
+  always_on_top: true,
+};
+
+const settings = ref<Settings>({ ...defaultSettings });
+// 滑块拖动过程中的实时预览，松手保存后回到 settings 里的值。
+const cardScalePreview = ref<number | null>(null);
+const effectiveCardScale = computed(() => cardScalePreview.value ?? settings.value.card_scale);
+const ropeSagPreview = ref<number | null>(null);
+const effectiveRopeSag = computed(() => ropeSagPreview.value ?? settings.value.rope_sag);
+const cardSwingPreview = ref<number | null>(null);
+const effectiveCardSwing = computed(() => cardSwingPreview.value ?? settings.value.card_swing);
+
+// 绳索显示/隐藏控制
+const isRopeVisible = ref(settings.value.rope_always_visible);
+let hideTimer: number | undefined;
+
+const toggleRope = () => {
+  if (isRopeVisible.value) {
+    hideRope();
+  } else {
+    showRope();
+  }
+};
+
+const showRope = () => {
+  isRopeVisible.value = true;
+  if (hideTimer) clearTimeout(hideTimer);
+  if (!settings.value.rope_always_visible && settings.value.rope_auto_hide_seconds > 0) {
+    hideTimer = window.setTimeout(() => {
+      hideRope();
+    }, settings.value.rope_auto_hide_seconds * 1000);
+  }
+};
+
+const hideRope = () => {
+  isRopeVisible.value = false;
+  if (hideTimer) clearTimeout(hideTimer);
+};
+
+watch(
+  () => settings.value.rope_always_visible,
+  (alwaysVisible) => {
+    if (alwaysVisible) {
+      showRope();
+    } else {
+      hideRope();
+    }
+  },
+);
+
+watch(
+  () => settings.value.theme,
+  (theme) => {
+    document.documentElement.dataset.theme = theme || 'classic';
+  },
+  { immediate: true },
+);
+
 const toast = reactive({
   message: '',
-  type: 'success',
+  type: 'success' as 'success' | 'error',
 });
+
+watch(
+  () => settings.value.always_on_top,
+  async (value) => {
+    if (!isTauri()) return;
+    await getCurrentWindow().setAlwaysOnTop(value).catch(() => undefined);
+  },
+  { immediate: true },
+);
+
+let unlistenImage: UnlistenFn | undefined;
+let unlistenText: UnlistenFn | undefined;
+let unlistenPanel: UnlistenFn | undefined;
+let unlistenSettings: UnlistenFn | undefined;
+let unlistenScalePreview: UnlistenFn | undefined;
+let unlistenSagPreview: UnlistenFn | undefined;
+let unlistenSwingPreview: UnlistenFn | undefined;
 
 const showToast = (message: string, type: 'success' | 'error' = 'success') => {
   toast.message = message;
@@ -137,105 +175,190 @@ const showToast = (message: string, type: 'success' | 'error' = 'success') => {
   }, 2000);
 };
 
-const handleImageClick = (_image: Image) => {
-  // TODO: Copy image to clipboard via Tauri
-  showToast('已复制到剪贴板');
+const refresh = async () => {
+  const [loadedImages, loadedTexts] = await Promise.all([api.getImages(), api.getTexts()]);
+  images.value = loadedImages;
+  texts.value = loadedTexts;
 };
 
-const handleDragStart = (image: Image) => {
-  console.log('Drag start:', image.path);
+const handleImageClick = async (image: ImageItem) => {
+  try {
+    await api.copyImage(image.path);
+    showToast('已复制到剪贴板');
+  } catch (err) {
+    showToast(`复制失败: ${err}`, 'error');
+  }
 };
 
-const handlePin = (_image: Image) => {
-  // TODO: Create pinned window via Tauri
-  showToast('已钉在桌面');
+const handleDragStart = async (image: ImageItem) => {
+  try {
+    await api.startFileDrag(image.id);
+  } catch (err) {
+    showToast(`拖拽失败: ${err}`, 'error');
+  }
 };
 
-const toggleBasket = () => {
-  showBasket.value = !showBasket.value;
-  if (showBasket.value) showTextEnvelope.value = false;
+const handleMoveToBasket = async (image: ImageItem) => {
+  try {
+    await api.moveToBasket(image.id);
+    showToast('已收进篮子');
+    await refresh();
+  } catch (err) {
+    showToast(`操作失败: ${err}`, 'error');
+  }
 };
 
-const toggleTextEnvelope = () => {
-  showTextEnvelope.value = !showTextEnvelope.value;
-  if (showTextEnvelope.value) showBasket.value = false;
+const handlePin = async (image: ImageItem) => {
+  try {
+    await api.pinImage(image.id);
+    showToast('已钉在桌面');
+    await refresh();
+  } catch (err) {
+    showToast(`贴图失败: ${err}`, 'error');
+  }
 };
 
-const handleHangImages = (ids: string[]) => {
-  // TODO: Move images from basket to rope via Tauri
-  showToast(`已挂上 ${ids.length} 张图片`);
+const handleEdit = async (image: ImageItem) => {
+  try {
+    await api.openImageEditor(image.id);
+  } catch (err) {
+    showToast(`打开编辑器失败: ${err}`, 'error');
+  }
 };
+
+const openPanel = (panel: 'basket' | 'texts') => {
+  showBasket.value = panel === 'basket';
+  showTextEnvelope.value = panel === 'texts';
+};
+
+const syncOverlayHeight = async (expanded: boolean) => {
+  if (expanded === overlayExpanded.value) return;
+  overlayExpanded.value = expanded;
+  if (isTauri()) {
+    await api.setOverlayExpanded(expanded).catch(() => undefined);
+  }
+};
+
+watch(
+  [showBasket, showTextEnvelope],
+  ([basket, envelope]) => {
+    void syncOverlayHeight(basket || envelope);
+  },
+  { immediate: true },
+);
+
+// 透明区域点击穿透依赖后端拿到的可交互矩形，这里定期上报最新布局。
+let hitTimer: number | undefined;
+let lastHitPayload = '';
+
+const reportHitRegions = () => {
+  if (!isTauri()) return;
+  const regions: number[][] = [];
+  document
+    .querySelectorAll<HTMLElement>('[data-hit], .glass-panel.is-visible')
+    .forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      regions.push([rect.left, rect.top, rect.right, rect.bottom]);
+    });
+  const payload = JSON.stringify(regions);
+  if (payload === lastHitPayload) return;
+  lastHitPayload = payload;
+  void api.setHitRegions(regions).catch(() => {
+    lastHitPayload = '';
+  });
+};
+
+const handleHangImages = async (ids: string[]) => {
+  try {
+    await Promise.all(ids.map((id) => api.moveToRope(id)));
+    showToast(`已挂上 ${ids.length} 张图片`);
+    await refresh();
+  } catch (err) {
+    showToast(`挂图失败: ${err}`, 'error');
+  }
+};
+
+const handleClearTexts = async () => {
+  try {
+    await api.clearTexts();
+    await refresh();
+    showToast('已清空文字');
+  } catch (err) {
+    showToast(`清空失败: ${err}`, 'error');
+  }
+};
+
+onMounted(async () => {
+  if (!isTauri()) {
+    console.info('Running outside Tauri, IPC disabled');
+    return;
+  }
+  // setup 阶段拿不到显示器信息，等 webview 就绪后再铺满屏幕顶边。
+  await api
+    .setOverlayExpanded(showBasket.value || showTextEnvelope.value)
+    .catch(() => undefined);
+  reportHitRegions();
+  hitTimer = window.setInterval(reportHitRegions, 200);
+  await refresh();
+  settings.value = await api.getSettings().catch(() => ({ ...defaultSettings }));
+  unlistenPanel = await events.onOpenPanel(openPanel);
+  unlistenSettings = await events.onSettingsUpdated((next) => {
+    settings.value = next;
+    cardScalePreview.value = null;
+    ropeSagPreview.value = null;
+    cardSwingPreview.value = null;
+  });
+  unlistenScalePreview = await events.onCardScalePreview((scale) => {
+    cardScalePreview.value = scale;
+  });
+  unlistenSagPreview = await events.onRopeSagPreview((percent) => {
+    ropeSagPreview.value = percent;
+  });
+  unlistenSwingPreview = await events.onCardSwingPreview((degrees) => {
+    cardSwingPreview.value = degrees;
+  });
+  unlistenImage = await events.onImageCollected((image) => {
+    const index = images.value.findIndex((existing) => existing.id === image.id);
+    if (index >= 0) {
+      images.value[index] = image;
+    } else {
+      images.value.push(image);
+    }
+    showToast('收集到新截图');
+  });
+  unlistenText = await events.onTextCollected((item) => {
+    texts.value.push(item);
+  });
+});
+
+onUnmounted(() => {
+  unlistenImage?.();
+  unlistenText?.();
+  unlistenPanel?.();
+  unlistenSettings?.();
+  unlistenScalePreview?.();
+  unlistenSagPreview?.();
+  unlistenSwingPreview?.();
+  if (hitTimer) window.clearInterval(hitTimer);
+  if (hideTimer) clearTimeout(hideTimer);
+});
 </script>
 
 <style scoped>
 .app-container {
-  min-height: 100vh;
-  background: var(--bg-void);
+  height: 100vh;
   position: relative;
   overflow: hidden;
-}
-
-.fab-container {
-  position: fixed;
-  right: var(--space-8);
-  bottom: var(--space-8);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  z-index: var(--z-sticky);
-}
-
-.fab {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-full);
-  background: var(--bg-glass);
-  border: 1px solid var(--border-hairline);
-  color: var(--text-primary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  transition: all var(--duration-normal) var(--ease-out-expo);
-  backdrop-filter: blur(12px);
-}
-
-.fab:hover {
-  transform: scale(1.1);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.fab.active {
-  background: var(--gradient-primary);
-  border-color: transparent;
-  box-shadow: var(--shadow-glow);
-}
-
-.fab-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  background: var(--accent-purple);
-  color: white;
-  font-size: 11px;
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-sm);
+  background: transparent;
 }
 
 .toast {
   position: fixed;
-  bottom: var(--space-8);
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-2) var(--space-5);
   background: var(--bg-glass);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-full);
@@ -263,5 +386,13 @@ const handleHangImages = (ids: string[]) => {
 .toast-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(20px);
+}
+</style>
+
+<style>
+html.overlay-window,
+html.overlay-window body,
+html.overlay-window #app {
+  background: transparent !important;
 }
 </style>

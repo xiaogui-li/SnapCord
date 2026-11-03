@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Default capabilities for SnapCord windows","local":true,"windows":["*"],"permissions":["core:default","core:window:allow-start-dragging","core:window:allow-close","core:window:allow-hide","core:window:allow-show","core:window:allow-set-always-on-top","core:window:allow-set-size","core:window:allow-set-position","shell:default"]}}

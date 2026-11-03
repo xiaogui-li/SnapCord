@@ -21,7 +21,7 @@
           @click="toggleSelect(image.id)"
         >
           <img :src="image.thumbnail" :alt="image.id" class="grid-image" />
-          <div class="checkbox" v-show="isHovered || selectedIds.has(image.id)">
+          <div class="checkbox" v-show="selectedIds.has(image.id)">
             <svg v-if="selectedIds.has(image.id)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
@@ -47,16 +47,10 @@ import GlassPanel from './GlassPanel.vue';
 import PanelHeader from './PanelHeader.vue';
 import DoubleBezelCard from './DoubleBezelCard.vue';
 import GlassButton from './GlassButton.vue';
-
-interface Image {
-  id: string;
-  path: string;
-  thumbnail: string;
-  timestamp: Date;
-}
+import type { ImageItem } from '../types';
 
 defineProps<{
-  images: Image[];
+  images: ImageItem[];
   isVisible: boolean;
 }>();
 
@@ -66,23 +60,24 @@ const emit = defineEmits<{
 }>();
 
 const selectedIds = ref(new Set<string>());
-const isHovered = ref(false);
 
 const toggleSelect = (id: string) => {
-  if (selectedIds.value.has(id)) {
-    selectedIds.value.delete(id);
+  const next = new Set(selectedIds.value);
+  if (next.has(id)) {
+    next.delete(id);
   } else {
-    selectedIds.value.add(id);
+    next.add(id);
   }
+  selectedIds.value = next;
 };
 
 const clearSelection = () => {
-  selectedIds.value.clear();
+  selectedIds.value = new Set();
 };
 
 const hangSelected = () => {
   emit('hang', Array.from(selectedIds.value));
-  selectedIds.value.clear();
+  selectedIds.value = new Set();
 };
 </script>
 

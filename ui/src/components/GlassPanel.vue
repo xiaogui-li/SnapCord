@@ -32,6 +32,10 @@ const panelStyle = computed(() => ({
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 
   /* Glass effect */
   background: var(--bg-glass);

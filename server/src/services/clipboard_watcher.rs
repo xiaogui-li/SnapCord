@@ -58,10 +58,6 @@ fn get_clipboard_text() -> Result<String, String> {
     get_clipboard::<String, _>(Unicode).map_err(|e| e.to_string())
 }
 
-pub fn get_clipboard_text_command() -> Result<String, String> {
-    get_clipboard_text()
-}
-
 pub fn copy_text_to_clipboard(text: String) -> Result<(), String> {
     use clipboard_win::formats::Unicode;
     use clipboard_win::set_clipboard;

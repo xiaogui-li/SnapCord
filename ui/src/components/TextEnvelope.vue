@@ -58,20 +58,17 @@ import { ref, computed } from 'vue';
 import GlassPanel from './GlassPanel.vue';
 import PanelHeader from './PanelHeader.vue';
 import GlassButton from './GlassButton.vue';
-
-interface TextItem {
-  id: string;
-  content: string;
-  timestamp: Date;
-}
+import type { TextItem } from '../types';
+import { api, isTauri } from '../api';
 
 const props = defineProps<{
   items: TextItem[];
   isVisible: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'close'): void;
+  (e: 'clear'): void;
 }>();
 
 const searchQuery = ref('');
@@ -86,27 +83,29 @@ const filteredItems = computed(() => {
 
 const copyText = async (text: string) => {
   try {
-    await navigator.clipboard.writeText(text);
+    if (isTauri()) {
+      await api.copyText(text);
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
   } catch (err) {
     console.error('Failed to copy:', err);
   }
 };
 
-const formatTime = (date: Date) => {
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
+const formatTime = (timestamp: number) => {
+  const diff = Date.now() - timestamp * 1000;
   const minutes = Math.floor(diff / 60000);
 
   if (minutes < 1) return '刚刚';
   if (minutes < 60) return `${minutes}分钟前`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}小时前`;
-  return date.toLocaleDateString('zh-CN');
+  return new Date(timestamp * 1000).toLocaleDateString('zh-CN');
 };
 
 const clearAll = () => {
-  // TODO: Implement via Tauri command
-  console.log('Clear all text items');
+  emit('clear');
 };
 </script>
 

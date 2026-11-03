@@ -1,5 +1,9 @@
 pub mod clipboard_watcher;
+pub mod clipboard_image_watcher;
 pub mod clipboard_service;
+pub mod click_through;
 pub mod file_watcher;
 pub mod hotkey;
+pub mod ole_drag;
+pub mod screen_capture;
 pub mod tray;
